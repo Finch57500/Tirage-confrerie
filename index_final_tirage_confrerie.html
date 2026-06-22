@@ -1,0 +1,173 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Tirage Confrérie Elvenar</title>
+<style>
+body{font-family:Arial,sans-serif;max-width:900px;margin:auto;padding:20px;background:#f5f7fa}
+.card{background:white;border-radius:10px;padding:15px;margin:12px 0;box-shadow:0 1px 4px rgba(0,0,0,.15)}
+textarea{width:100%;height:180px}
+button{padding:10px 14px;margin:4px;cursor:pointer}
+#winner{font-size:1.4em;font-weight:bold}
+ul{padding-left:20px}
+</style>
+</head>
+<body>
+<h1>🎲 Tirage Confrérie Elvenar</h1>
+
+<div class="card">
+<h2>🏆 Dernier gagnant</h2>
+<div id="winner">Aucun tirage</div>
+<div id="winnerDate"></div>
+</div>
+
+<div class="card">
+<button onclick="drawWinner()">🎲 Effectuer un tirage</button>
+<button onclick="undoDraw()">↩️ Annuler le dernier tirage</button>
+</div>
+
+<div class="card">
+<h2>👥 Joueurs</h2>
+<textarea id="players"></textarea><br>
+<button onclick="savePlayers()">💾 Sauvegarder les joueurs</button>
+</div>
+
+<div class="card">
+<h2>📜 Historique</h2>
+<ul id="history"></ul>
+</div>
+
+<div class="card">
+<button onclick="exportData()">📤 Export JSON</button>
+<button onclick="document.getElementById('importFile').click()">📥 Import JSON</button>
+<input type="file" id="importFile" style="display:none">
+</div>
+
+<script>
+const RESET_WEIGHT=0.4;
+const INC_WEIGHT=0.2;
+
+function saveStateSnapshot(){
+ localStorage.setItem("backupState", JSON.stringify({
+  playersList:localStorage.getItem("playersList"),
+  weights:localStorage.getItem("weights"),
+  history:localStorage.getItem("history"),
+  lastWinner:localStorage.getItem("lastWinner"),
+  lastWinnerDate:localStorage.getItem("lastWinnerDate")
+ }));
+}
+
+function load(){
+ document.getElementById("players").value=localStorage.getItem("playersList")||"";
+ render();
+}
+
+function savePlayers(){
+ localStorage.setItem("playersList",document.getElementById("players").value);
+ alert("Joueurs sauvegardés");
+}
+
+function players(){
+ return document.getElementById("players").value.split("\n").map(x=>x.trim()).filter(Boolean);
+}
+
+function drawWinner(){
+ const p=players();
+ if(!p.length){alert("Ajoute des joueurs");return;}
+
+ saveStateSnapshot();
+
+ let weights=JSON.parse(localStorage.getItem("weights")||"{}");
+ p.forEach(x=>{if(weights[x]==null) weights[x]=1;});
+
+ let total=0;
+ p.forEach(x=>total+=weights[x]);
+
+ let r=Math.random()*total;
+ let winner=p[0];
+
+ for(const name of p){
+   r-=weights[name];
+   if(r<=0){winner=name;break;}
+ }
+
+ p.forEach(x=>{
+   if(x===winner) weights[x]=RESET_WEIGHT;
+   else weights[x]+=INC_WEIGHT;
+ });
+
+ const now=new Date().toLocaleDateString('fr-FR');
+
+ let history=JSON.parse(localStorage.getItem("history")||"[]");
+ history.unshift({winner:winner,date:now});
+
+ localStorage.setItem("weights",JSON.stringify(weights));
+ localStorage.setItem("history",JSON.stringify(history));
+ localStorage.setItem("lastWinner",winner);
+ localStorage.setItem("lastWinnerDate",now);
+ localStorage.setItem("playersList",document.getElementById("players").value);
+
+ render();
+}
+
+function undoDraw(){
+ const backup=localStorage.getItem("backupState");
+ if(!backup){alert("Aucun tirage à annuler");return;}
+ const data=JSON.parse(backup);
+ Object.keys(data).forEach(k=>{
+   if(data[k]===null) localStorage.removeItem(k);
+   else localStorage.setItem(k,data[k]);
+ });
+ render();
+ alert("Dernier tirage annulé");
+}
+
+function render(){
+ document.getElementById("winner").textContent=localStorage.getItem("lastWinner")||"Aucun tirage";
+ document.getElementById("winnerDate").textContent=localStorage.getItem("lastWinnerDate")||"";
+
+ const ul=document.getElementById("history");
+ ul.innerHTML="";
+ const history=JSON.parse(localStorage.getItem("history")||"[]");
+ history.forEach(h=>{
+   const li=document.createElement("li");
+   li.textContent=h.date+" — "+h.winner;
+   ul.appendChild(li);
+ });
+}
+
+function exportData(){
+ const data={
+  playersList:localStorage.getItem("playersList"),
+  weights:localStorage.getItem("weights"),
+  history:localStorage.getItem("history"),
+  lastWinner:localStorage.getItem("lastWinner"),
+  lastWinnerDate:localStorage.getItem("lastWinnerDate")
+ };
+ const blob=new Blob([JSON.stringify(data,null,2)],{type:"application/json"});
+ const a=document.createElement("a");
+ a.href=URL.createObjectURL(blob);
+ a.download="tirage_confrerie_data.json";
+ a.click();
+}
+
+document.getElementById("importFile").addEventListener("change",e=>{
+ const f=e.target.files[0];
+ if(!f) return;
+ const r=new FileReader();
+ r.onload=()=>{
+   const data=JSON.parse(r.result);
+   Object.keys(data).forEach(k=>{
+     if(data[k]!=null) localStorage.setItem(k,data[k]);
+   });
+   load();
+   alert("Import réussi");
+ };
+ r.readAsText(f);
+});
+
+load();
+</script>
+</body>
+</html>
